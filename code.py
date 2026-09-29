@@ -196,6 +196,60 @@ class ModelBasedAgent:
         return "NOOP"  # everything reachable has been explored
 
 
+class GoalBasedAgent:
+    """Chooses actions by how much they reduce distance to the current goal.
+
+    Goal 1: reach the key. Goal 2 (after pickup): reach the destination.
+    The agent is given the goal coordinates, but not the obstacle layout;
+    obstacles are sensed through percepts. No path is planned: each step
+    picks the neighbour with the lowest (distance to goal + visit count),
+    so it is drawn toward the goal but pushed away from cells it has
+    already used.
+    """
+
+    def __init__(self, start, key, dest):
+        self.pos = start
+        self.key, self.dest = key, dest
+        self.visits = {}
+        self.had_key = False
+
+    @staticmethod
+    def _distance(a, b):
+        return abs(a[0] - b[0]) + abs(a[1] - b[1])  # Manhattan
+
+    def _current_goal(self, percept):
+        return self.dest if percept.has_key else self.key
+
+    def act(self, percept):
+        # Goal switch: key collected, target becomes the destination.
+        if percept.has_key and not self.had_key:
+            self.had_key = True
+            self.visits.clear()
+        self.visits[self.pos] = self.visits.get(self.pos, 0) + 1
+
+        if percept.on_key:
+            return "COLLECT"
+        if percept.on_dest and percept.has_key:
+            return "FINISH"
+
+        goal = self._current_goal(percept)
+        best_dir, best_cost = None, None
+        for direction in PRIORITY:
+            if not percept.free[direction]:
+                continue  # avoid obstacles
+            dr, dc = MOVES[direction]
+            cell = (self.pos[0] + dr, self.pos[1] + dc)
+            cost = self._distance(cell, goal) + self.visits.get(cell, 0)
+            if best_cost is None or cost < best_cost:
+                best_dir, best_cost = direction, cost
+
+        if best_dir is None:
+            return "NOOP"
+        dr, dc = MOVES[best_dir]
+        self.pos = (self.pos[0] + dr, self.pos[1] + dc)
+        return best_dir
+
+
 def run(world, agent, max_steps=50, verbose=True):
     env = Environment(world)
     for step in range(max_steps):
@@ -215,10 +269,14 @@ if __name__ == "__main__":
     print(world.render(), "\n")
 
     print("=== SimpleReflexAgent ===")
-    ok, steps = run(world, SimpleReflexAgent(), verbose=False)
+    ok, steps = run(world, SimpleReflexAgent(), verbose=True)
     print(f"success: {ok} | steps: {steps}\n")
 
     print("=== ModelBasedAgent ===")
-    agent = ModelBasedAgent()
+    ok, steps = run(world, ModelBasedAgent(), verbose=True)
+    print(f"success: {ok} | steps: {steps}\n")
+
+    print("=== GoalBasedAgent ===")
+    agent = GoalBasedAgent(world.start, world.key, world.dest)
     ok, steps = run(world, agent, verbose=True)
-    print(f"\nsuccess: {ok} | steps: {steps} | known cells: {len(agent.known)}")
+    print(f"\nsuccess: {ok} | steps: {steps}")
