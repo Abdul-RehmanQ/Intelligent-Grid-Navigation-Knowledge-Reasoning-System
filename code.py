@@ -137,6 +137,65 @@ class SimpleReflexAgent:
         return "NOOP"  # boxed in
 
 
+class ModelBasedAgent:
+    """Keeps an internal model: known cells, visited cells, a backtrack path.
+
+    The percept does not contain coordinates, so the agent tracks its own
+    position by dead reckoning from an assumed origin (0, 0).
+    """
+
+    def __init__(self):
+        self.pos = (0, 0)          # believed position (relative to start)
+        self.known = {}            # cell -> "free" | "obstacle"
+        self.visited = set()       # cells visited in the current phase
+        self.path = []             # cells to backtrack through
+        self.had_key = False       # used to detect the key-pickup phase change
+
+    def _update_model(self, percept):
+        # New phase after the key is collected: revisiting cells is needed
+        # again, so visited/path are cleared. Known obstacles are kept.
+        if percept.has_key and not self.had_key:
+            self.had_key = True
+            self.visited.clear()
+            self.path.clear()
+
+        self.known[self.pos] = "free"
+        self.visited.add(self.pos)
+        for direction, (dr, dc) in MOVES.items():
+            cell = (self.pos[0] + dr, self.pos[1] + dc)
+            self.known[cell] = "free" if percept.free[direction] else "obstacle"
+
+    def _step(self, direction):
+        dr, dc = MOVES[direction]
+        self.pos = (self.pos[0] + dr, self.pos[1] + dc)
+        return direction
+
+    def act(self, percept):
+        self._update_model(percept)
+
+        if percept.on_key:
+            return "COLLECT"
+        if percept.on_dest and percept.has_key:
+            return "FINISH"
+
+        # 1. Move to an unvisited, known-free neighbour (priority order).
+        for direction in PRIORITY:
+            dr, dc = MOVES[direction]
+            cell = (self.pos[0] + dr, self.pos[1] + dc)
+            if self.known.get(cell) == "free" and cell not in self.visited:
+                self.path.append(self.pos)
+                return self._step(direction)
+
+        # 2. Dead end: backtrack along the remembered path.
+        if self.path:
+            target = self.path.pop()
+            delta = (target[0] - self.pos[0], target[1] - self.pos[1])
+            direction = next(d for d, v in MOVES.items() if v == delta)
+            return self._step(direction)
+
+        return "NOOP"  # everything reachable has been explored
+
+
 def run(world, agent, max_steps=50, verbose=True):
     env = Environment(world)
     for step in range(max_steps):
@@ -154,5 +213,12 @@ def run(world, agent, max_steps=50, verbose=True):
 if __name__ == "__main__":
     world = GridWorld(LAYOUT)
     print(world.render(), "\n")
-    success, steps = run(world, SimpleReflexAgent())
-    print("\nsuccess:", success, "| steps:", steps)
+
+    print("=== SimpleReflexAgent ===")
+    ok, steps = run(world, SimpleReflexAgent(), verbose=False)
+    print(f"success: {ok} | steps: {steps}\n")
+
+    print("=== ModelBasedAgent ===")
+    agent = ModelBasedAgent()
+    ok, steps = run(world, agent, verbose=True)
+    print(f"\nsuccess: {ok} | steps: {steps} | known cells: {len(agent.known)}")
