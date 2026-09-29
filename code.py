@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 LAYOUT = [
     "A . . # .",
     ". # . # .",
@@ -6,6 +8,12 @@ LAYOUT = [
 ]
 
 AGENT, KEY, DEST, OBSTACLE, EMPTY = "A", "K", "D", "#", "."
+
+
+@dataclass(frozen=True)
+class State:
+    position: tuple  # (row, col)
+    has_key: bool
 
 
 class GridWorld:
@@ -67,8 +75,18 @@ class GridWorld:
         return "\n".join(lines)
 
 
+def initial_state(world):
+    return State(position=world.start, has_key=False)
+
+
 if __name__ == "__main__":
     world = GridWorld(LAYOUT)
     print(world.render())
     print("start:", world.start, "key:", world.key, "dest:", world.dest)
     print("walls:", sorted(world.walls))
+
+    s0 = initial_state(world)
+    print(s0)  # State(position=(0, 0), has_key=False)
+
+    s1 = State(position=world.key, has_key=True)
+    print(s1)  # State(position=(2, 2), has_key=True)
