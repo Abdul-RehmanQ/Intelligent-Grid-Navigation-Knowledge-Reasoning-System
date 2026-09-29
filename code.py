@@ -79,14 +79,80 @@ def initial_state(world):
     return State(position=world.start, has_key=False)
 
 
+# ---------------------------------------------------------------- Step 3
+from collections import namedtuple
+
+MOVES = {"UP": (-1, 0), "RIGHT": (0, 1), "DOWN": (1, 0), "LEFT": (0, -1)}
+PRIORITY = ["UP", "RIGHT", "DOWN", "LEFT"]
+
+# What the agent senses at the current moment.
+Percept = namedtuple(
+    "Percept", ["on_key", "on_dest", "has_key", "free"]  # free: {direction: bool}
+)
+
+
+class Environment:
+    """Holds the true state, produces percepts, applies actions."""
+
+    def __init__(self, world):
+        self.world = world
+        self.state = initial_state(world)
+
+    def percept(self):
+        pos = self.state.position
+        free = {
+            d: self.world.is_free((pos[0] + dr, pos[1] + dc))
+            for d, (dr, dc) in MOVES.items()
+        }
+        return Percept(
+            on_key=(pos == self.world.key and not self.state.has_key),
+            on_dest=(pos == self.world.dest),
+            has_key=self.state.has_key,
+            free=free,
+        )
+
+    def execute(self, action):
+        pos, has_key = self.state.position, self.state.has_key
+        if action == "COLLECT":
+            has_key = True
+        elif action in MOVES:
+            dr, dc = MOVES[action]
+            new_pos = (pos[0] + dr, pos[1] + dc)
+            if self.world.is_free(new_pos):
+                pos = new_pos
+        self.state = State(position=pos, has_key=has_key)
+
+
+class SimpleReflexAgent:
+    """Stateless: action depends only on the current percept."""
+
+    def act(self, percept):
+        if percept.on_key:
+            return "COLLECT"
+        if percept.on_dest and percept.has_key:
+            return "FINISH"
+        for direction in PRIORITY:
+            if percept.free[direction]:
+                return direction
+        return "NOOP"  # boxed in
+
+
+def run(world, agent, max_steps=50, verbose=True):
+    env = Environment(world)
+    for step in range(max_steps):
+        percept = env.percept()
+        action = agent.act(percept)
+        if verbose:
+            print(f"step {step:2d}  pos={env.state.position}  "
+                  f"key={env.state.has_key!s:5}  action={action}")
+        if action == "FINISH":
+            return True, step
+        env.execute(action)
+    return False, max_steps
+
+
 if __name__ == "__main__":
     world = GridWorld(LAYOUT)
-    print(world.render())
-    print("start:", world.start, "key:", world.key, "dest:", world.dest)
-    print("walls:", sorted(world.walls))
-
-    s0 = initial_state(world)
-    print(s0)  # State(position=(0, 0), has_key=False)
-
-    s1 = State(position=world.key, has_key=True)
-    print(s1)  # State(position=(2, 2), has_key=True)
+    print(world.render(), "\n")
+    success, steps = run(world, SimpleReflexAgent())
+    print("\nsuccess:", success, "| steps:", steps)
