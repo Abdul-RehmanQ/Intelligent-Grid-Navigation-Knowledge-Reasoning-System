@@ -1,4 +1,14 @@
+from collections import namedtuple
 from dataclasses import dataclass
+
+# Step 6 - Formal Search Problem
+INITIAL_STATE = ("position=(0, 0)", "has_key=False")
+ACTIONS = ["UP", "DOWN", "LEFT", "RIGHT", "COLLECT_KEY"]
+GOAL_TEST = "position == destination and has_key == True"
+PATH_COST = {"UP": 1, "DOWN": 1, "LEFT": 1, "RIGHT": 1, "COLLECT_KEY": 1}
+
+# Search problem structure:
+# Initial State -> Possible Actions -> New States -> ... -> Goal State
 
 LAYOUT = [
     "A . . # .",
@@ -80,8 +90,6 @@ def initial_state(world):
 
 
 # ---------------------------------------------------------------- Step 3
-from collections import namedtuple
-
 MOVES = {"UP": (-1, 0), "RIGHT": (0, 1), "DOWN": (1, 0), "LEFT": (0, -1)}
 PRIORITY = ["UP", "RIGHT", "DOWN", "LEFT"]
 
@@ -113,7 +121,7 @@ class Environment:
 
     def execute(self, action):
         pos, has_key = self.state.position, self.state.has_key
-        if action == "COLLECT":
+        if action == "COLLECT_KEY":
             has_key = True
         elif action in MOVES:
             dr, dc = MOVES[action]
@@ -128,7 +136,7 @@ class SimpleReflexAgent:
 
     def act(self, percept):
         if percept.on_key:
-            return "COLLECT"
+            return "COLLECT_KEY"
         if percept.on_dest and percept.has_key:
             return "FINISH"
         for direction in PRIORITY:
@@ -174,7 +182,7 @@ class ModelBasedAgent:
         self._update_model(percept)
 
         if percept.on_key:
-            return "COLLECT"
+            return "COLLECT_KEY"
         if percept.on_dest and percept.has_key:
             return "FINISH"
 
@@ -228,7 +236,7 @@ class GoalBasedAgent:
         self.visits[self.pos] = self.visits.get(self.pos, 0) + 1
 
         if percept.on_key:
-            return "COLLECT"
+            return "COLLECT_KEY"
         if percept.on_dest and percept.has_key:
             return "FINISH"
 
