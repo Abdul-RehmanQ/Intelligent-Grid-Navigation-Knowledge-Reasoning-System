@@ -237,6 +237,55 @@ def ucs_search(world):
     }
 
 
+def manhattan_distance(a, b):
+    return abs(a[0] - b[0]) + abs(a[1] - b[1])
+
+
+def greedy_best_first_search(world):
+    """Greedy Best-First Search using Manhattan distance heuristic."""
+    start_state = State(position=world.start, has_key=False)
+    priority_queue = [(0, 0, start_state, [start_state])]
+    visited = {start_state}
+    nodes_expanded = 0
+    counter = 1
+    start_time = perf_counter()
+
+    while priority_queue:
+        _, _, state, path = heappop(priority_queue)
+        nodes_expanded += 1
+
+        if state.position == world.dest and state.has_key:
+            elapsed = perf_counter() - start_time
+            path_length = len(path) - 1
+            return {
+                "Path found": True,
+                "Path": path,
+                "Path length": path_length,
+                "Path cost": path_length,
+                "Nodes expanded": nodes_expanded,
+                "Execution time": elapsed,
+            }
+
+        goal = world.dest if state.has_key else world.key
+        for action, next_state in legal_successors(state, world):
+            if next_state not in visited:
+                visited.add(next_state)
+                next_goal = world.dest if next_state.has_key else world.key
+                heuristic = manhattan_distance(next_state.position, next_goal)
+                heappush(priority_queue, (heuristic, counter, next_state, path + [next_state]))
+                counter += 1
+
+    elapsed = perf_counter() - start_time
+    return {
+        "Path found": False,
+        "Path": [],
+        "Path length": 0,
+        "Path cost": 0,
+        "Nodes expanded": nodes_expanded,
+        "Execution time": elapsed,
+    }
+
+
 # ---------------------------------------------------------------- Step 3
 MOVES = {"UP": (-1, 0), "RIGHT": (0, 1), "DOWN": (1, 0), "LEFT": (0, -1)}
 PRIORITY = ["UP", "RIGHT", "DOWN", "LEFT"]
@@ -455,6 +504,17 @@ if __name__ == "__main__":
     print(f"Execution time: {ucs_result['Execution time']:.6f} seconds")
     if ucs_result["Path"]:
         print("Path:", [state.position for state in ucs_result["Path"]])
+    print()
+
+    print("=== Greedy Best-First Search ===")
+    greedy_result = greedy_best_first_search(world)
+    print(f"Path found: {'Yes' if greedy_result['Path found'] else 'No'}")
+    print(f"Path length: {greedy_result['Path length']}")
+    print(f"Path cost: {greedy_result['Path cost']}")
+    print(f"Nodes expanded: {greedy_result['Nodes expanded']}")
+    print(f"Execution time: {greedy_result['Execution time']:.6f} seconds")
+    if greedy_result["Path"]:
+        print("Path:", [state.position for state in greedy_result["Path"]])
     print()
 
     print("=== SimpleReflexAgent ===")
