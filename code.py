@@ -1,3 +1,4 @@
+import sys
 from collections import deque, namedtuple
 from dataclasses import dataclass
 from heapq import heappop, heappush
@@ -8,15 +9,65 @@ INITIAL_STATE = ("position=(0, 0)", "has_key=False")
 ACTIONS = ["UP", "DOWN", "LEFT", "RIGHT", "COLLECT_KEY"]
 GOAL_TEST = "position == destination and has_key == True"
 PATH_COST = {"UP": 1, "DOWN": 1, "LEFT": 1, "RIGHT": 1, "COLLECT_KEY": 1}
+DEFAULT_AGENT_MAX_STEPS_FACTOR = 4
 
 # Search problem structure:
 # Initial State -> Possible Actions -> New States -> ... -> Goal State
+
+MOVES = {"UP": (-1, 0), "RIGHT": (0, 1), "DOWN": (1, 0), "LEFT": (0, -1)}
+PRIORITY = ["UP", "RIGHT", "DOWN", "LEFT"]
 
 LAYOUT = [
     "A . . # .",
     ". # . # .",
     ". . K . .",
     "# . . # D",
+]
+
+TEST_GRIDS = [
+    [
+        "A . . # .",
+        ". # . # .",
+        ". . K . .",
+        "# . . # D",
+    ],
+    [
+        "A . . . .",
+        ". # # # .",
+        ". . . . K",
+        ". # . . .",
+        ". . . . D",
+    ],
+    [
+        "A . . . . .",
+        ". # # . # .",
+        ". . . . . .",
+        ". # . # . K",
+        ". . . . # .",
+        ". . # . . D",
+    ],
+    [
+        "A . . . . . . .",
+        ". # # . # # . .",
+        ". . . . . . . .",
+        ". # . # . # . .",
+        ". . . . . . . .",
+        ". # # . # . . .",
+        ". . . . . . . K",
+        ". . # . . . # D",
+    ],
+    [
+        "A . . . . . . . . .",
+        ". # # . # # . . . .",
+        ". . . . . . . # . .",
+        ". # . # . # . . . .",
+        ". . . . . . . . # .",
+        ". # # . # . # . . .",
+        ". . . . . . . . . K",
+        ". . # . . # . # . .",
+        ". . . . # . . . . .",
+        ". . . . . . # . . D",
+    ],
 ]
 
 AGENT, KEY, DEST, OBSTACLE, EMPTY = "A", "K", "D", "#", "."
@@ -96,6 +147,10 @@ def initial_state(world):
     return State(position=world.start, has_key=False)
 
 
+def is_goal(state, world):
+    return state.position == world.dest and state.has_key
+
+
 def legal_successors(state, world):
     """Return all valid next states from the current state."""
     successors = []
@@ -126,7 +181,7 @@ def bfs_search(world):
         state, path = queue.popleft()
         nodes_expanded += 1
 
-        if state.position == world.dest and state.has_key:
+        if is_goal(state, world):
             elapsed = perf_counter() - start_time
             path_length = len(path) - 1
             return {
@@ -166,7 +221,7 @@ def dfs_search(world):
         state, path = stack.pop()
         nodes_expanded += 1
 
-        if state.position == world.dest and state.has_key:
+        if is_goal(state, world):
             elapsed = perf_counter() - start_time
             path_length = len(path) - 1
             return {
@@ -214,7 +269,7 @@ def ucs_search(world):
             continue
 
         nodes_expanded += 1
-        if state.position == world.dest and state.has_key:
+        if is_goal(state, world):
             elapsed = perf_counter() - start_time
             path_length = len(path) - 1
             return {
@@ -261,7 +316,7 @@ def greedy_best_first_search(world):
         _, _, state, path = heappop(priority_queue)
         nodes_expanded += 1
 
-        if state.position == world.dest and state.has_key:
+        if is_goal(state, world):
             elapsed = perf_counter() - start_time
             path_length = len(path) - 1
             return {
@@ -273,7 +328,6 @@ def greedy_best_first_search(world):
                 "Execution time": elapsed,
             }
 
-        goal = world.dest if state.has_key else world.key
         for action, next_state in legal_successors(state, world):
             if next_state not in visited:
                 visited.add(next_state)
@@ -309,7 +363,7 @@ def a_star_search(world):
             continue
 
         nodes_expanded += 1
-        if state.position == world.dest and state.has_key:
+        if is_goal(state, world):
             elapsed = perf_counter() - start_time
             path_length = len(path) - 1
             return {
@@ -354,7 +408,7 @@ def ida_star_search(world):
         f_cost = g_cost + h_cost
         if f_cost > threshold:
             return None, f_cost
-        if state.position == world.dest and state.has_key:
+        if is_goal(state, world):
             return path, True
 
         nodes_expanded += 1
@@ -366,8 +420,6 @@ def ida_star_search(world):
             next_path = path + [next_state]
             result, next_threshold = search(next_state, next_path, g_cost + PATH_COST[action], threshold)
             if result is not None:
-                if result is True:
-                    return path, True
                 return result, True
             if next_threshold is not None and next_threshold < min_next_threshold:
                 min_next_threshold = next_threshold
@@ -407,11 +459,6 @@ def ida_star_search(world):
         "Nodes expanded": nodes_expanded,
         "Execution time": elapsed,
     }
-
-
-# ---------------------------------------------------------------- Step 3
-MOVES = {"UP": (-1, 0), "RIGHT": (0, 1), "DOWN": (1, 0), "LEFT": (0, -1)}
-PRIORITY = ["UP", "RIGHT", "DOWN", "LEFT"]
 
 # What the agent senses at the current moment.
 Percept = namedtuple(
@@ -578,7 +625,10 @@ class GoalBasedAgent:
         return best_dir
 
 
-def run(world, agent, max_steps=50, verbose=True):
+def run(world, agent, max_steps=None, verbose=True):
+    if max_steps is None:
+        max_steps = DEFAULT_AGENT_MAX_STEPS_FACTOR * world.rows * world.cols
+
     env = Environment(world)
     for step in range(max_steps):
         percept = env.percept()
@@ -592,21 +642,24 @@ def run(world, agent, max_steps=50, verbose=True):
     return False, max_steps
 
 
-if __name__ == "__main__":
-    world = GridWorld(LAYOUT)
-    print(world.render(), "\n")
+def print_search_summary(title, result):
+    print(f"=== {title} ===")
+    print(f"Path found: {'Yes' if result['Path found'] else 'No'}")
+    print(f"Path length (actions): {result['Path length']}")
+    print(f"Path cost: {result['Path cost']}")
+    print(f"States recorded: {len(result['Path'])}")
+    print(f"Nodes expanded: {result['Nodes expanded']}")
+    runtime = result.get("Average execution time", result["Execution time"])
+    print(f"Execution time: {runtime:.6f} seconds")
+    if result["Path"]:
+        print("Path states:", [state.position for state in result["Path"]])
+    print()
 
-    def print_search_summary(title, result):
-        print(f"=== {title} ===")
-        print(f"Path found: {'Yes' if result['Path found'] else 'No'}")
-        print(f"Path length (actions): {result['Path length']}")
-        print(f"Path cost: {result['Path cost']}")
-        print(f"States recorded: {len(result['Path'])}")
-        print(f"Nodes expanded: {result['Nodes expanded']}")
-        print(f"Execution time: {result['Execution time']:.6f} seconds")
-        if result["Path"]:
-            print("Path states:", [state.position for state in result["Path"]])
-        print()
+
+def run_all_search_algorithms(world, label):
+    print(f"\n=== {label} ===")
+    print(f"{world.rows}x{world.cols} grid")
+    print(world.render(), "\n")
 
     print_search_summary("BFS", bfs_search(world))
     print_search_summary("DFS", dfs_search(world))
@@ -615,15 +668,114 @@ if __name__ == "__main__":
     print_search_summary("A* Search", a_star_search(world))
     print_search_summary("IDA* Search", ida_star_search(world))
 
-    print("=== SimpleReflexAgent ===")
-    ok, steps = run(world, SimpleReflexAgent(), verbose=True)
-    print(f"success: {ok} | steps: {steps}\n")
 
-    print("=== ModelBasedAgent ===")
-    ok, steps = run(world, ModelBasedAgent(), verbose=True)
-    print(f"success: {ok} | steps: {steps}\n")
+def benchmark_search_algorithms(world):
+    search_functions = [
+        ("BFS", bfs_search),
+        ("DFS", dfs_search),
+        ("UCS", ucs_search),
+        ("Greedy Best-First Search", greedy_best_first_search),
+        ("A* Search", a_star_search),
+        ("IDA* Search", ida_star_search),
+    ]
+    results = {}
+    for name, func in search_functions:
+        samples = [func(world) for _ in range(10)]
+        avg_time = sum(item["Execution time"] for item in samples) / len(samples)
+        result = dict(samples[0])
+        result["Average execution time"] = avg_time
+        results[name] = result
+    return results
 
-    print("=== GoalBasedAgent ===")
-    agent = GoalBasedAgent(world.start, world.key, world.dest)
-    ok, steps = run(world, agent, verbose=True)
-    print(f"\nsuccess: {ok} | steps: {steps}")
+
+def print_search_comparison(test_worlds):
+    print("\n=== Cross-grid search comparison (nodes expanded) ===")
+    algorithms = ["BFS", "DFS", "UCS", "Greedy Best-First Search", "A* Search", "IDA* Search"]
+    headers = ["Algorithm", *[f"Grid {i + 1}" for i in range(len(test_worlds))]]
+    print(f"{headers[0]:<28}", end="")
+    for header in headers[1:]:
+        print(f"{header:>10}", end="")
+    print()
+
+    for algorithm in algorithms:
+        values = []
+        for world in test_worlds:
+            result = benchmark_search_algorithms(world)[algorithm]
+            values.append(result["Nodes expanded"])
+        print(f"{algorithm:<28}", end="")
+        for value in values:
+            print(f"{value:>10}", end="")
+        print()
+
+    print("\nNote: BFS and UCS are equivalent here because every move costs 1, so UCS collapses to BFS on this uniform-cost grid.")
+    print("Greedy is optimal on all five layouts here, but that is a property of these layouts rather than a general guarantee of Greedy search.")
+    print("IDA* includes repeated work across iterations and no duplicate detection beyond the current path, which explains the very large expansion count on the biggest grid.")
+
+
+def evaluate_agents(worlds, verbose=False):
+    if isinstance(worlds, GridWorld):
+        worlds = [worlds]
+
+    print("\n=== Agent evaluation across all grids ===")
+    for index, world in enumerate(worlds, start=1):
+        print(f"\n--- Grid {index} ({world.rows}x{world.cols}) ---")
+        print(world.render(), "\n")
+
+        print("=== SimpleReflexAgent ===")
+        ok, steps = run(world, SimpleReflexAgent(), max_steps=4 * world.rows * world.cols, verbose=verbose)
+        print(f"success: {ok} | steps: {steps}\n")
+
+        print("=== ModelBasedAgent ===")
+        ok, steps = run(world, ModelBasedAgent(), max_steps=4 * world.rows * world.cols, verbose=verbose)
+        print(f"success: {ok} | steps: {steps}\n")
+
+        print("=== GoalBasedAgent ===")
+        agent = GoalBasedAgent(world.start, world.key, world.dest)
+        ok, steps = run(world, agent, max_steps=4 * world.rows * world.cols, verbose=verbose)
+        print(f"success: {ok} | steps: {steps}\n")
+
+
+def prompt_for_test_count(max_count, default=None):
+    if default is None:
+        default = max_count
+
+    if not sys.stdin.isatty():
+        return default
+
+    try:
+        raw_value = input(f"How many test environments do you want to run? [{default}] ")
+    except (EOFError, KeyboardInterrupt):
+        return default
+
+    value = raw_value.strip()
+    if not value:
+        return default
+
+    try:
+        count = int(value)
+    except ValueError:
+        print("Invalid input. Using the default value.")
+        return default
+
+    if count < 1:
+        print("Count must be at least 1. Using 1.")
+        return 1
+    if count > max_count:
+        print(f"Only {max_count} predefined environments are available. Using {max_count}.")
+        return max_count
+    return count
+
+
+if __name__ == "__main__":
+    max_count = len(TEST_GRIDS)
+    num_tests = prompt_for_test_count(max_count, default=max_count)
+
+    selected_worlds = [GridWorld(TEST_GRIDS[i]) for i in range(num_tests)]
+    print(f"\nRunning search evaluation on {num_tests} predefined test environment(s).\n")
+    for i, world in enumerate(selected_worlds, start=1):
+        run_all_search_algorithms(world, f"Test Grid {i}")
+
+    print_search_comparison(selected_worlds)
+
+    # Agent evaluation is kept separate from the search evaluation and is run on each grid.
+    evaluate_agents(selected_worlds, verbose=False)
