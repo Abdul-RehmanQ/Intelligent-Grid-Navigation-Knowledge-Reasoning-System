@@ -1,5 +1,6 @@
-from collections import namedtuple
+from collections import deque, namedtuple
 from dataclasses import dataclass
+from time import perf_counter
 
 # Step 6 - Formal Search Problem
 INITIAL_STATE = ("position=(0, 0)", "has_key=False")
@@ -87,6 +88,106 @@ class GridWorld:
 
 def initial_state(world):
     return State(position=world.start, has_key=False)
+
+
+def legal_successors(state, world):
+    """Return all valid next states from the current state."""
+    successors = []
+    pos = state.position
+
+    if pos == world.key and not state.has_key:
+        successors.append(("COLLECT_KEY", State(position=pos, has_key=True)))
+
+    for action, (dr, dc) in MOVES.items():
+        new_pos = (pos[0] + dr, pos[1] + dc)
+        if world.is_free(new_pos):
+            successors.append((action, State(position=new_pos, has_key=state.has_key)))
+
+    return successors
+
+
+def bfs_search(world):
+    """Breadth-First Search for the grid world problem."""
+    start_state = State(position=world.start, has_key=False)
+    queue = deque([(start_state, [start_state])])
+    visited = {start_state}
+    nodes_expanded = 0
+    start_time = perf_counter()
+
+    while queue:
+        state, path = queue.popleft()
+        nodes_expanded += 1
+
+        if state.position == world.dest and state.has_key:
+            elapsed = perf_counter() - start_time
+            path_length = len(path) - 1
+            return {
+                "Path found": True,
+                "Path": path,
+                "Path length": path_length,
+                "Path cost": path_length,
+                "Nodes expanded": nodes_expanded,
+                "Execution time": elapsed,
+            }
+
+        for action, next_state in legal_successors(state, world):
+            if next_state not in visited:
+                visited.add(next_state)
+                queue.append((next_state, path + [next_state]))
+
+    elapsed = perf_counter() - start_time
+    return {
+        "Path found": False,
+        "Path": [],
+        "Path length": 0,
+        "Path cost": 0,
+        "Nodes expanded": nodes_expanded,
+        "Execution time": elapsed,
+    }
+
+
+def dfs_search(world):
+    """Depth-First Search for the grid world problem."""
+    start_state = State(position=world.start, has_key=False)
+    stack = [(start_state, [start_state])]
+    visited = {start_state}
+    nodes_expanded = 0
+    start_time = perf_counter()
+
+    while stack:
+        state, path = stack.pop()
+        nodes_expanded += 1
+
+        if state.position == world.dest and state.has_key:
+            elapsed = perf_counter() - start_time
+            path_length = len(path) - 1
+            return {
+                "Path found": True,
+                "Path": path,
+                "Path length": path_length,
+                "Path cost": path_length,
+                "Nodes expanded": nodes_expanded,
+                "Execution time": elapsed,
+            }
+
+        next_states = []
+        for action, next_state in legal_successors(state, world):
+            if next_state not in visited:
+                visited.add(next_state)
+                next_states.append((action, next_state, path + [next_state]))
+
+        for action, next_state, next_path in reversed(next_states):
+            stack.append((next_state, next_path))
+
+    elapsed = perf_counter() - start_time
+    return {
+        "Path found": False,
+        "Path": [],
+        "Path length": 0,
+        "Path cost": 0,
+        "Nodes expanded": nodes_expanded,
+        "Execution time": elapsed,
+    }
 
 
 # ---------------------------------------------------------------- Step 3
@@ -275,6 +376,28 @@ def run(world, agent, max_steps=50, verbose=True):
 if __name__ == "__main__":
     world = GridWorld(LAYOUT)
     print(world.render(), "\n")
+
+    print("=== BFS ===")
+    bfs_result = bfs_search(world)
+    print(f"Path found: {'Yes' if bfs_result['Path found'] else 'No'}")
+    print(f"Path length: {bfs_result['Path length']}")
+    print(f"Path cost: {bfs_result['Path cost']}")
+    print(f"Nodes expanded: {bfs_result['Nodes expanded']}")
+    print(f"Execution time: {bfs_result['Execution time']:.6f} seconds")
+    if bfs_result["Path"]:
+        print("Path:", [state.position for state in bfs_result["Path"]])
+    print()
+
+    print("=== DFS ===")
+    dfs_result = dfs_search(world)
+    print(f"Path found: {'Yes' if dfs_result['Path found'] else 'No'}")
+    print(f"Path length: {dfs_result['Path length']}")
+    print(f"Path cost: {dfs_result['Path cost']}")
+    print(f"Nodes expanded: {dfs_result['Nodes expanded']}")
+    print(f"Execution time: {dfs_result['Execution time']:.6f} seconds")
+    if dfs_result["Path"]:
+        print("Path:", [state.position for state in dfs_result["Path"]])
+    print()
 
     print("=== SimpleReflexAgent ===")
     ok, steps = run(world, SimpleReflexAgent(), verbose=True)
