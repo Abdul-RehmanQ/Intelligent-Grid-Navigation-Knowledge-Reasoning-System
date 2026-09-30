@@ -1,5 +1,6 @@
 from collections import deque, namedtuple
 from dataclasses import dataclass
+from heapq import heappop, heappush
 from time import perf_counter
 
 # Step 6 - Formal Search Problem
@@ -178,6 +179,52 @@ def dfs_search(world):
 
         for action, next_state, next_path in reversed(next_states):
             stack.append((next_state, next_path))
+
+    elapsed = perf_counter() - start_time
+    return {
+        "Path found": False,
+        "Path": [],
+        "Path length": 0,
+        "Path cost": 0,
+        "Nodes expanded": nodes_expanded,
+        "Execution time": elapsed,
+    }
+
+
+def ucs_search(world):
+    """Uniform Cost Search for the grid world problem."""
+    start_state = State(position=world.start, has_key=False)
+    priority_queue = [(0, 0, start_state, [start_state])]
+    best_cost = {start_state: 0}
+    nodes_expanded = 0
+    counter = 1
+    start_time = perf_counter()
+
+    while priority_queue:
+        cost_so_far, _, state, path = heappop(priority_queue)
+
+        if cost_so_far > best_cost.get(state, float("inf")):
+            continue
+
+        nodes_expanded += 1
+        if state.position == world.dest and state.has_key:
+            elapsed = perf_counter() - start_time
+            path_length = len(path) - 1
+            return {
+                "Path found": True,
+                "Path": path,
+                "Path length": path_length,
+                "Path cost": cost_so_far,
+                "Nodes expanded": nodes_expanded,
+                "Execution time": elapsed,
+            }
+
+        for action, next_state in legal_successors(state, world):
+            next_cost = cost_so_far + PATH_COST[action]
+            if next_cost < best_cost.get(next_state, float("inf")):
+                best_cost[next_state] = next_cost
+                heappush(priority_queue, (next_cost, counter, next_state, path + [next_state]))
+                counter += 1
 
     elapsed = perf_counter() - start_time
     return {
@@ -397,6 +444,17 @@ if __name__ == "__main__":
     print(f"Execution time: {dfs_result['Execution time']:.6f} seconds")
     if dfs_result["Path"]:
         print("Path:", [state.position for state in dfs_result["Path"]])
+    print()
+
+    print("=== UCS ===")
+    ucs_result = ucs_search(world)
+    print(f"Path found: {'Yes' if ucs_result['Path found'] else 'No'}")
+    print(f"Path length: {ucs_result['Path length']}")
+    print(f"Path cost: {ucs_result['Path cost']}")
+    print(f"Nodes expanded: {ucs_result['Nodes expanded']}")
+    print(f"Execution time: {ucs_result['Execution time']:.6f} seconds")
+    if ucs_result["Path"]:
+        print("Path:", [state.position for state in ucs_result["Path"]])
     print()
 
     print("=== SimpleReflexAgent ===")
