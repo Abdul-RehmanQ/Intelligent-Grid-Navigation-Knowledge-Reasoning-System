@@ -27,6 +27,11 @@ class State:
     position: tuple  # (row, col)
     has_key: bool
 
+    # Important: the search state is not just the cell coordinate.
+    # It is (position, has_key). Therefore, the agent may remain on the
+    # same position after COLLECT_KEY, but still move to a different state.
+    # That is expected and is not an error.
+
 
 class GridWorld:
     def __init__(self, layout):
@@ -96,6 +101,8 @@ def legal_successors(state, world):
     successors = []
     pos = state.position
 
+    # A key collection does not change position, but it does change the state
+    # because the state is (position, has_key). This is intentional.
     if pos == world.key and not state.has_key:
         successors.append(("COLLECT_KEY", State(position=pos, has_key=True)))
 
@@ -334,6 +341,74 @@ def a_star_search(world):
     }
 
 
+def ida_star_search(world):
+    """Iterative Deepening A* using a Manhattan-distance heuristic."""
+    start_state = State(position=world.start, has_key=False)
+    start_time = perf_counter()
+    nodes_expanded = 0
+
+    def search(state, path, g_cost, threshold):
+        nonlocal nodes_expanded
+        next_goal = world.dest if state.has_key else world.key
+        h_cost = manhattan_distance(state.position, next_goal)
+        f_cost = g_cost + h_cost
+        if f_cost > threshold:
+            return None, f_cost
+        if state.position == world.dest and state.has_key:
+            return path, True
+
+        nodes_expanded += 1
+        min_next_threshold = float("inf")
+
+        for action, next_state in legal_successors(state, world):
+            if next_state in path:
+                continue
+            next_path = path + [next_state]
+            result, next_threshold = search(next_state, next_path, g_cost + PATH_COST[action], threshold)
+            if result is not None:
+                if result is True:
+                    return path, True
+                return result, True
+            if next_threshold is not None and next_threshold < min_next_threshold:
+                min_next_threshold = next_threshold
+
+        return None, min_next_threshold
+
+    threshold = manhattan_distance(start_state.position, world.key) if not start_state.has_key else manhattan_distance(start_state.position, world.dest)
+    path = [start_state]
+    solution = None
+
+    while True:
+        result, next_value = search(start_state, path, 0, threshold)
+        if result is not None:
+            solution = result
+            break
+        if next_value == float("inf"):
+            break
+        threshold = next_value
+
+    elapsed = perf_counter() - start_time
+    if not solution:
+        return {
+            "Path found": False,
+            "Path": [],
+            "Path length": 0,
+            "Path cost": 0,
+            "Nodes expanded": nodes_expanded,
+            "Execution time": elapsed,
+        }
+
+    path_length = len(solution) - 1
+    return {
+        "Path found": True,
+        "Path": solution,
+        "Path length": path_length,
+        "Path cost": path_length,
+        "Nodes expanded": nodes_expanded,
+        "Execution time": elapsed,
+    }
+
+
 # ---------------------------------------------------------------- Step 3
 MOVES = {"UP": (-1, 0), "RIGHT": (0, 1), "DOWN": (1, 0), "LEFT": (0, -1)}
 PRIORITY = ["UP", "RIGHT", "DOWN", "LEFT"]
@@ -521,60 +596,24 @@ if __name__ == "__main__":
     world = GridWorld(LAYOUT)
     print(world.render(), "\n")
 
-    print("=== BFS ===")
-    bfs_result = bfs_search(world)
-    print(f"Path found: {'Yes' if bfs_result['Path found'] else 'No'}")
-    print(f"Path length: {bfs_result['Path length']}")
-    print(f"Path cost: {bfs_result['Path cost']}")
-    print(f"Nodes expanded: {bfs_result['Nodes expanded']}")
-    print(f"Execution time: {bfs_result['Execution time']:.6f} seconds")
-    if bfs_result["Path"]:
-        print("Path:", [state.position for state in bfs_result["Path"]])
-    print()
+    def print_search_summary(title, result):
+        print(f"=== {title} ===")
+        print(f"Path found: {'Yes' if result['Path found'] else 'No'}")
+        print(f"Path length (actions): {result['Path length']}")
+        print(f"Path cost: {result['Path cost']}")
+        print(f"States recorded: {len(result['Path'])}")
+        print(f"Nodes expanded: {result['Nodes expanded']}")
+        print(f"Execution time: {result['Execution time']:.6f} seconds")
+        if result["Path"]:
+            print("Path states:", [state.position for state in result["Path"]])
+        print()
 
-    print("=== DFS ===")
-    dfs_result = dfs_search(world)
-    print(f"Path found: {'Yes' if dfs_result['Path found'] else 'No'}")
-    print(f"Path length: {dfs_result['Path length']}")
-    print(f"Path cost: {dfs_result['Path cost']}")
-    print(f"Nodes expanded: {dfs_result['Nodes expanded']}")
-    print(f"Execution time: {dfs_result['Execution time']:.6f} seconds")
-    if dfs_result["Path"]:
-        print("Path:", [state.position for state in dfs_result["Path"]])
-    print()
-
-    print("=== UCS ===")
-    ucs_result = ucs_search(world)
-    print(f"Path found: {'Yes' if ucs_result['Path found'] else 'No'}")
-    print(f"Path length: {ucs_result['Path length']}")
-    print(f"Path cost: {ucs_result['Path cost']}")
-    print(f"Nodes expanded: {ucs_result['Nodes expanded']}")
-    print(f"Execution time: {ucs_result['Execution time']:.6f} seconds")
-    if ucs_result["Path"]:
-        print("Path:", [state.position for state in ucs_result["Path"]])
-    print()
-
-    print("=== Greedy Best-First Search ===")
-    greedy_result = greedy_best_first_search(world)
-    print(f"Path found: {'Yes' if greedy_result['Path found'] else 'No'}")
-    print(f"Path length: {greedy_result['Path length']}")
-    print(f"Path cost: {greedy_result['Path cost']}")
-    print(f"Nodes expanded: {greedy_result['Nodes expanded']}")
-    print(f"Execution time: {greedy_result['Execution time']:.6f} seconds")
-    if greedy_result["Path"]:
-        print("Path:", [state.position for state in greedy_result["Path"]])
-    print()
-
-    print("=== A* Search ===")
-    astar_result = a_star_search(world)
-    print(f"Path found: {'Yes' if astar_result['Path found'] else 'No'}")
-    print(f"Path length: {astar_result['Path length']}")
-    print(f"Path cost: {astar_result['Path cost']}")
-    print(f"Nodes expanded: {astar_result['Nodes expanded']}")
-    print(f"Execution time: {astar_result['Execution time']:.6f} seconds")
-    if astar_result["Path"]:
-        print("Path:", [state.position for state in astar_result["Path"]])
-    print()
+    print_search_summary("BFS", bfs_search(world))
+    print_search_summary("DFS", dfs_search(world))
+    print_search_summary("UCS", ucs_search(world))
+    print_search_summary("Greedy Best-First Search", greedy_best_first_search(world))
+    print_search_summary("A* Search", a_star_search(world))
+    print_search_summary("IDA* Search", ida_star_search(world))
 
     print("=== SimpleReflexAgent ===")
     ok, steps = run(world, SimpleReflexAgent(), verbose=True)
